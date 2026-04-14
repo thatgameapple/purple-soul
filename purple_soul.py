@@ -7,8 +7,15 @@ from datetime import datetime
 import pathlib
 import re
 
-SAVE_DIR = pathlib.Path("/Volumes/剪辑/writer_notes")
-SAVE_DIR.mkdir(exist_ok=True)
+CONFIG_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "config"
+CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+if not CONFIG_FILE.exists():
+    default_dir = pathlib.Path.home() / "Documents" / "purple-soul"
+    CONFIG_FILE.write_text(str(default_dir), encoding="utf-8")
+
+SAVE_DIR = pathlib.Path(CONFIG_FILE.read_text(encoding="utf-8").strip())
+SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def parse_tags(text: str) -> list[str]:
@@ -117,10 +124,10 @@ class WriterApp(App):
     CSS = """
     Screen { background: #0d0d0d; }
 
-    ScrollBar { display: none; visibility: hidden; }
-    ScrollBarCorner { display: none; visibility: hidden; }
-    TextArea > * ScrollBar { display: none; visibility: hidden; }
-    TextArea > * ScrollBarCorner { display: none; visibility: hidden; }
+    ScrollBar { display: none !important; }
+    ScrollBarCorner { display: none !important; }
+    * > ScrollBar { display: none !important; }
+    * > ScrollBarCorner { display: none !important; }
 
     #editor-wrap {
         align: center top;

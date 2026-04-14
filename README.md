@@ -48,6 +48,21 @@ Write `#tag` or `#parent/child` anywhere in your text to organize files — like
 
 在文字中直接写 `#标签` 或 `#父级/子级`，自动归类文件——像 flomo，但在终端里。
 
+## Storage · 存储路径
+
+Files are saved to `~/Documents/purple-soul` by default.
+
+默认保存到 `~/Documents/purple-soul`。
+
+To change the path, edit:
+
+```
+~/.config/purple-soul/config
+```
+
+Replace the content with your preferred directory path.  
+修改文件内容为你想要的目录路径即可。
+
 ## Design · 设计理念
 
 - Pure black background · 纯黑背景 `#0d0d0d`
