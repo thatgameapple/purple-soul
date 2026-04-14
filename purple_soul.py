@@ -238,7 +238,7 @@ class WriterApp(App):
         Binding("ctrl+n", "new_file", "new"),
         Binding("ctrl+e", "export_clipboard", "copy all", show=False),
         Binding("ctrl+l", "open_list", "files", show=False),
-        Binding("ctrl+f", "toggle_search", "search", show=False),
+        Binding("ctrl+g", "toggle_search", "search", show=False),
         Binding("ctrl+p", "open_settings", "path", show=False),
         Binding("escape", "close_search", "", show=False),
     ]
