@@ -187,23 +187,30 @@ class WriterApp(App):
     TextArea:focus { border: none; }
 
     #search-bar {
-        height: 12;
+        height: 10;
         background: #0d0d0d;
         border-top: solid #1a1a1a;
-        padding: 0 2;
+        align: center top;
+        padding: 1 0;
         display: none;
     }
 
+    #search-wrap {
+        width: 80;
+    }
+
     #search-bar Input {
-        background: #141414;
+        background: #0d0d0d;
         color: #d0d0d0;
-        border: solid #2a2a2a;
+        border: none;
+        border-bottom: solid #2a2a2a;
+        padding: 0 0;
     }
 
     #search-results { background: #0d0d0d; border: none; padding: 0; }
-    #search-results ListItem { background: #0d0d0d; color: #444444; padding: 0 2; }
-    #search-results ListItem:hover { background: #141414; color: #cccccc; }
-    #search-results ListItem.--highlight { background: #141414; color: #e0e0e0; }
+    #search-results ListItem { background: #0d0d0d; color: #444444; padding: 0 0; }
+    #search-results ListItem:hover { background: #0d0d0d; color: #cccccc; }
+    #search-results ListItem.--highlight { background: #0d0d0d; color: #e0e0e0; }
 
     #statusbar {
         height: 1;
@@ -240,14 +247,16 @@ class WriterApp(App):
         super().__init__()
         self._current_file: pathlib.Path | None = None
         self._search_visible = False
+        self._last_keyword: str = ""
 
     def compose(self) -> ComposeResult:
         with Vertical():
             with Center(id="editor-wrap"):
                 yield TextArea(language="markdown", id="editor")
             with Vertical(id="search-bar"):
-                yield Input(placeholder="> search_", id="search-input")
-                yield ListView(id="search-results")
+                with Vertical(id="search-wrap"):
+                    yield Input(placeholder="> search_", id="search-input")
+                    yield ListView(id="search-results")
         yield Label("", id="statusbar")
         yield Footer()
 
@@ -286,15 +295,36 @@ class WriterApp(App):
             except Exception:
                 return
             self._current_file = path
-            self.query_one("#editor", TextArea).load_text(content)
+            editor = self.query_one("#editor", TextArea)
+            editor.load_text(content)
             self.action_close_search()
+            self._jump_to_keyword(content, self._last_keyword)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        self._do_global_search(event.value.strip())
+        kw = event.value.strip()
+        self._last_keyword = kw
+        self._do_global_search(kw)
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        if len(event.value.strip()) >= 2:
-            self._do_global_search(event.value.strip())
+        kw = event.value.strip()
+        if len(kw) >= 2:
+            self._last_keyword = kw
+            self._do_global_search(kw)
+
+    def _jump_to_keyword(self, content: str, keyword: str) -> None:
+        if not keyword:
+            return
+        from textual.widgets.text_area import Selection
+        editor = self.query_one("#editor", TextArea)
+        lines = content.splitlines()
+        for row, line in enumerate(lines):
+            col = line.lower().find(keyword.lower())
+            if col != -1:
+                editor.move_cursor((row, col))
+                editor.selection = Selection(
+                    (row, col), (row, col + len(keyword))
+                )
+                break
 
     def _do_global_search(self, keyword: str) -> None:
         if not keyword:
