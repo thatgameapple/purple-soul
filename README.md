@@ -11,6 +11,8 @@ Just you, your words, and a black screen.
 
 ![screenshot](https://raw.githubusercontent.com/thatgameapple/writer/main/screenshot.png)
 
+![screenshot2](https://raw.githubusercontent.com/thatgameapple/writer/main/screenshot2.png)
+
 ---
 
 Built with [Textual](https://github.com/Textualize/textual). Inspired by the idea that writing should feel like thinking — quiet, focused, and fast.
