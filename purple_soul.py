@@ -88,6 +88,7 @@ class SettingsScreen(ModalScreen):
 
 class FileListScreen(ModalScreen):
     AUTO_FOCUS = "#tag-list"
+    BINDINGS = [("p", "pin_tag", "pin tag")]
     CSS = """
     FileListScreen { align: center middle; }
     #filelist-box {
@@ -169,6 +170,24 @@ class FileListScreen(ModalScreen):
         elif event.list_view.id == "file-list":
             self.dismiss(name)
 
+    def action_pin_tag(self) -> None:
+        focused = self.focused
+        if focused and focused.id == "tag-list":
+            tl = self.query_one("#tag-list", ListView)
+            idx = tl.index
+            if idx is not None:
+                children = list(tl.children)
+                if 0 <= idx < len(children):
+                    item = children[idx]
+                    if item.name and item.name.startswith("tag:"):
+                        tag = item.name[4:]
+                        if tag in self._pinned:
+                            self._pinned.remove(tag)
+                        else:
+                            self._pinned.insert(0, tag)
+                        save_pinned(self._pinned)
+                        self._load_tags()
+
     def on_key(self, event) -> None:
         if event.key == "escape":
             self.dismiss(None)
@@ -178,23 +197,6 @@ class FileListScreen(ModalScreen):
                 self.query_one("#file-list").focus()
             else:
                 self.query_one("#tag-list").focus()
-        elif event.key == "p":
-            focused = self.focused
-            if focused and focused.id == "tag-list":
-                tl = self.query_one("#tag-list", ListView)
-                idx = tl.index
-                if idx is not None:
-                    children = list(tl.query("ListItem"))
-                    if 0 <= idx < len(children):
-                        item = children[idx]
-                        if item.name and item.name.startswith("tag:"):
-                            tag = item.name[4:]
-                            if tag in self._pinned:
-                                self._pinned.remove(tag)
-                            else:
-                                self._pinned.insert(0, tag)
-                            save_pinned(self._pinned)
-                            self._load_tags()
 
 
 class WriterApp(App):
