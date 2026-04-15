@@ -8,6 +8,7 @@ import pathlib
 import re
 
 CONFIG_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "config"
+PINNED_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "pinned_tags"
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 if not CONFIG_FILE.exists():
@@ -16,6 +17,15 @@ if not CONFIG_FILE.exists():
 
 SAVE_DIR = pathlib.Path(CONFIG_FILE.read_text(encoding="utf-8").strip())
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_pinned() -> list[str]:
+    if PINNED_FILE.exists():
+        return [l.strip() for l in PINNED_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return []
+
+def save_pinned(pinned: list[str]) -> None:
+    PINNED_FILE.write_text("\n".join(pinned), encoding="utf-8")
 
 
 def parse_tags(text: str) -> list[str]:
@@ -108,10 +118,11 @@ class FileListScreen(ModalScreen):
             key=lambda f: f.stat().st_mtime, reverse=True
         )
         self._tag_tree = build_tag_tree(self._all_files)
+        self._pinned: list[str] = load_pinned()
 
     def compose(self) -> ComposeResult:
         with Vertical(id="filelist-box"):
-            yield Label("  tab  enter  esc", id="filelist-hint")
+            yield Label("  tab  enter  esc    p = pin tag", id="filelist-hint")
             with Horizontal():
                 yield ListView(id="tag-list")
                 yield ListView(id="file-list")
@@ -124,7 +135,16 @@ class FileListScreen(ModalScreen):
         tl = self.query_one("#tag-list", ListView)
         tl.clear()
         tl.append(ListItem(Label("  all"), name="all"))
+        # 置顶标签优先显示
+        valid_pinned = [t for t in self._pinned if t in self._tag_tree]
+        for tag in valid_pinned:
+            count = len(self._tag_tree.get(tag, []))
+            display = tag.split("/")[-1]
+            tl.append(ListItem(Label(f"  ★ {display}  {count}"), name=f"tag:{tag}"))
+        # 普通标签
         for tag in sorted(self._tag_tree.keys()):
+            if tag in valid_pinned:
+                continue
             depth = tag.count("/")
             indent = "  " + "    " * depth
             display = tag.split("/")[-1]
@@ -158,6 +178,19 @@ class FileListScreen(ModalScreen):
                 self.query_one("#file-list").focus()
             else:
                 self.query_one("#tag-list").focus()
+        elif event.key == "p":
+            focused = self.focused
+            if focused and focused.id == "tag-list":
+                tl = self.query_one("#tag-list", ListView)
+                item = tl.highlighted_child
+                if item and item.name and item.name.startswith("tag:"):
+                    tag = item.name[4:]
+                    if tag in self._pinned:
+                        self._pinned.remove(tag)
+                    else:
+                        self._pinned.insert(0, tag)
+                    save_pinned(self._pinned)
+                    self._load_tags()
 
 
 class WriterApp(App):
