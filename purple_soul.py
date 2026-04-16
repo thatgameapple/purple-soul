@@ -2,6 +2,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Footer, ListView, ListItem, Label, Input
 from textual.binding import Binding
 from textual.message import Message
+from textual.events import Key
 from textual.containers import Horizontal, Vertical, Center
 from textual.screen import ModalScreen
 from datetime import datetime
@@ -89,16 +90,19 @@ class SettingsScreen(ModalScreen):
 
 class TagListView(ListView):
     """支持 p 键置顶的标签列表"""
-    BINDINGS = [Binding("p", "pin_item", "pin tag", show=False)]
 
     class PinToggled(Message):
         def __init__(self, index: int) -> None:
             super().__init__()
             self.index = index
 
-    def action_pin_item(self) -> None:
-        if self.index is not None:
-            self.post_message(self.PinToggled(self.index))
+    async def _on_key(self, event: Key) -> None:
+        if event.key == "p":
+            event.stop()
+            if self.index is not None:
+                self.post_message(self.PinToggled(self.index))
+        else:
+            await super()._on_key(event)
 
 
 class FileListScreen(ModalScreen):
@@ -208,6 +212,21 @@ class FileListScreen(ModalScreen):
                 self.query_one("#file-list").focus()
             else:
                 self.query_one("#tag-list").focus()
+        elif event.key == "p":
+            tl = self.query_one("#tag-list", TagListView)
+            idx = tl.index
+            if idx is not None:
+                children = list(tl.children)
+                if 0 <= idx < len(children):
+                    item = children[idx]
+                    if item.name and item.name.startswith("tag:"):
+                        tag = item.name[4:]
+                        if tag in self._pinned:
+                            self._pinned.remove(tag)
+                        else:
+                            self._pinned.insert(0, tag)
+                        save_pinned(self._pinned)
+                        self._load_tags()
 
 
 class WriterApp(App):
