@@ -9,6 +9,7 @@ from datetime import datetime
 import pathlib
 import re
 import shutil
+import subprocess
 import time
 
 CONFIG_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "config"
@@ -286,6 +287,44 @@ class FileListScreen(ModalScreen):
         shutil.move(str(path), str(dest))
 
 
+def _pbcopy(text: str) -> None:
+    try:
+        subprocess.run("pbcopy", input=text.encode("utf-8"), check=False)
+    except Exception:
+        pass
+
+
+def _pbpaste() -> str:
+    try:
+        return subprocess.run("pbpaste", capture_output=True, check=False).stdout.decode("utf-8")
+    except Exception:
+        return ""
+
+
+class Editor(TextArea):
+    """复制/剪切/粘贴接 macOS 系统剪贴板（pbcopy/pbpaste），
+    绕开 Textual 默认的 OSC52 —— macOS 终端不支持，导致复制不到系统剪贴板。
+    键位沿用 TextArea 自带的 Ctrl+C / Ctrl+X / Ctrl+V。"""
+
+    def action_copy(self) -> None:
+        text = self.selected_text or self.text
+        if text:
+            _pbcopy(text)
+
+    def action_cut(self) -> None:
+        if self.selected_text:
+            _pbcopy(self.selected_text)
+            start, end = sorted([self.selection.start, self.selection.end])
+            self.delete(start, end)
+
+    def action_paste(self) -> None:
+        text = _pbpaste()
+        if not text:
+            return
+        start, end = sorted([self.selection.start, self.selection.end])
+        self.replace(text, start, end)
+
+
 class WriterApp(App):
     CSS = """
     Screen { background: #0d0d0d; }
@@ -381,7 +420,7 @@ class WriterApp(App):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Center(id="editor-wrap"):
-                yield TextArea(language="markdown", id="editor")
+                yield Editor(language="markdown", id="editor")
             with Vertical(id="search-bar"):
                 with Vertical(id="search-wrap"):
                     yield Input(placeholder="> search_", id="search-input")
