@@ -33,7 +33,8 @@ twine upload "${WHL}" "${TAR}"
 git tag -a "${TAG}" -m "${TAG}"
 git push origin "${TAG}"
 if [ -d /Volumes/03备份/purple-soul.git ]; then
-  git push backup --all --tags
+  git push backup --all
+  git push backup --tags
   echo "→ 已同步到 03备份盘"
 else
   echo "⚠ 03备份盘未挂载，跳过备份同步"
