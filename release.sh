@@ -26,7 +26,8 @@ fi
 rm -f "${WHL}" "${TAR}"
 python3 -m build
 
-# 4. PyPI
+# 4. PyPI（token 存在 macOS keyring，用 __token__ 作用户名去取）
+export TWINE_USERNAME=__token__
 twine upload "${WHL}" "${TAR}"
 
 # 5. tag + push（origin + 03备份盘 mirror）
