@@ -1,5 +1,6 @@
 [build-system]
-requires = ["hatchling"]
+# 锁 <1.30：hatchling 1.30 起生成 metadata 2.5，twine/packaging 暂不认（发布会 InvalidDistribution）。待生态支持后可放开。
+requires = ["hatchling<1.30"]
 build-backend = "hatchling.build"
 
 [project]
