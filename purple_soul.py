@@ -91,6 +91,47 @@ class SettingsScreen(ModalScreen):
             self.dismiss(None)
 
 
+class RenameScreen(ModalScreen):
+    AUTO_FOCUS = "#rename-input"
+    CSS = """
+    RenameScreen { align: center middle; }
+    #rename-box {
+        width: 70; height: 10;
+        background: #0d0d0d;
+        border: solid #2a2a2a;
+        padding: 1 2;
+    }
+    #rename-title { height: 1; color: #555555; margin-bottom: 1; }
+    #rename-current { height: 1; color: #3a3a3a; margin-bottom: 1; }
+    #rename-input {
+        background: #141414;
+        color: #d0d0d0;
+        border: solid #2a2a2a;
+    }
+    #rename-hint { height: 1; color: #333333; margin-top: 1; }
+    """
+
+    def __init__(self, current_name: str) -> None:
+        super().__init__()
+        self._current_name = current_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="rename-box"):
+            yield Label("  rename", id="rename-title")
+            yield Label(f"  current: {self._current_name}", id="rename-current")
+            yield Input(value=self._current_name, id="rename-input")
+            yield Label("  enter to confirm  esc to cancel", id="rename-hint")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        new_name = event.value.strip()
+        if new_name:
+            self.dismiss(new_name)
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+
 class TagListView(ListView):
     """支持 p 键置顶的标签列表"""
 
@@ -304,7 +345,10 @@ def _pbpaste() -> str:
 class Editor(TextArea):
     """复制/剪切/粘贴接 macOS 系统剪贴板（pbcopy/pbpaste），
     绕开 Textual 默认的 OSC52 —— macOS 终端不支持，导致复制不到系统剪贴板。
-    键位沿用 TextArea 自带的 Ctrl+C / Ctrl+X / Ctrl+V。"""
+    键位沿用 TextArea 自带的 Ctrl+C / Ctrl+X / Ctrl+V；另把 Ctrl+E 改回“复制全文”
+    （TextArea 默认 Ctrl+E 是“光标移到行尾”，会盖掉 App 的复制全文，故在此覆盖）。"""
+
+    BINDINGS = [Binding("ctrl+e", "copy_all", "copy all", show=False)]
 
     def action_copy(self) -> None:
         text = self.selected_text or self.text
@@ -323,6 +367,11 @@ class Editor(TextArea):
             return
         start, end = sorted([self.selection.start, self.selection.end])
         self.replace(text, start, end)
+
+    def action_copy_all(self) -> None:
+        if self.text.strip():
+            _pbcopy(self.text)
+            self.app.notify("copied all.", timeout=2)
 
 
 class WriterApp(App):
@@ -406,6 +455,7 @@ class WriterApp(App):
         Binding("ctrl+l", "open_list", "files", show=False),
         Binding("ctrl+g", "toggle_search", "search", show=False),
         Binding("ctrl+p", "open_settings", "path", show=False),
+        Binding("ctrl+r", "rename", "rename", show=False),
         Binding("escape", "close_search", "", show=False),
     ]
 
@@ -589,6 +639,41 @@ class WriterApp(App):
                 SAVE_DIR = p
                 self.notify(f"saved to: {p}", timeout=3)
         self.push_screen(SettingsScreen(), handle)
+
+    def action_rename(self) -> None:
+        editor = self.query_one("#editor", TextArea)
+        # 还没保存过的，先存一下生成文件，再重命名
+        if self._current_file is None:
+            if not editor.text.strip():
+                self.notify("nothing to rename yet.", timeout=2)
+                return
+            self._do_save(silent=True)
+        if self._current_file is None:
+            return
+
+        def handle(new_name: str | None) -> None:
+            if not new_name:
+                return
+            name = re.sub(r'[#/\\:*?"<>|]', '', new_name).strip()
+            if not name:
+                self.notify("invalid name.", timeout=2)
+                return
+            target = self._current_file.with_name(f"{name}.txt")
+            if target == self._current_file:
+                return
+            if target.exists():
+                self.notify(f"'{name}' already exists.", timeout=3)
+                return
+            try:
+                self._current_file.rename(target)
+            except Exception as e:
+                self.notify(f"rename failed: {e}", timeout=3)
+                return
+            self._current_file = target
+            self._update_status()
+            self.notify(f"renamed: {name}", timeout=2)
+
+        self.push_screen(RenameScreen(self._current_file.stem), handle)
 
     def action_toggle_search(self) -> None:
         self._search_visible = not self._search_visible
