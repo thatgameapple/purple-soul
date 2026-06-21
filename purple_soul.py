@@ -18,7 +18,7 @@ def _portable_base() -> "pathlib.Path | None":
     """便携版（PyInstaller 打包）返回 启动.command 所在目录，让配置与文稿
     都落在硬盘里、跟着盘走；源码 / PyPI 运行返回 None，沿用系统 home 路径。"""
     if getattr(sys, "frozen", False):
-        # onefile 模式：单文件可执行就在成品根目录，配置与文稿落在它旁边
+        # PyInstaller onefile：单文件可执行就在成品根目录
         return pathlib.Path(sys.executable).resolve().parent
     return None
 
