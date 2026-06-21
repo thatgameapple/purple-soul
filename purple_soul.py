@@ -10,15 +10,34 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import time
 
-CONFIG_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "config"
-PINNED_FILE = pathlib.Path.home() / ".config" / "purple-soul" / "pinned_tags"
-CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def _portable_base() -> "pathlib.Path | None":
+    """便携版（PyInstaller 打包）返回 启动.command 所在目录，让配置与文稿
+    都落在硬盘里、跟着盘走；源码 / PyPI 运行返回 None，沿用系统 home 路径。"""
+    if getattr(sys, "frozen", False):
+        # onefile 模式：单文件可执行就在成品根目录，配置与文稿落在它旁边
+        return pathlib.Path(sys.executable).resolve().parent
+    return None
+
+
+_PORTABLE = _portable_base()
+
+if _PORTABLE is not None:
+    CONFIG_DIR = _PORTABLE / ".purple-soul"
+    _DEFAULT_SAVE = _PORTABLE / "文稿"
+else:
+    CONFIG_DIR = pathlib.Path.home() / ".config" / "purple-soul"
+    _DEFAULT_SAVE = pathlib.Path.home() / "Documents" / "purple-soul"
+
+CONFIG_FILE = CONFIG_DIR / "config"
+PINNED_FILE = CONFIG_DIR / "pinned_tags"
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 if not CONFIG_FILE.exists():
-    default_dir = pathlib.Path.home() / "Documents" / "purple-soul"
-    CONFIG_FILE.write_text(str(default_dir), encoding="utf-8")
+    CONFIG_FILE.write_text(str(_DEFAULT_SAVE), encoding="utf-8")
 
 SAVE_DIR = pathlib.Path(CONFIG_FILE.read_text(encoding="utf-8").strip())
 SAVE_DIR.mkdir(parents=True, exist_ok=True)

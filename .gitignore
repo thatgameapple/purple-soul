@@ -1,5 +1,6 @@
 recon/
 lianzai_*/
+packaging/
 *.jsonl
 *.db
 __pycache__/
