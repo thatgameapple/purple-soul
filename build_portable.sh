@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# purple-soul 便携版（兄弟版）打包：PyInstaller --onefile 出自包含单文件，
-# 拷到任何 Apple Silicon Mac（含 ExFAT 移动盘）双击即用，文稿跟盘走。
+# purple-soul 独立版打包：PyInstaller --onefile 出自包含单文件，
+# 拷到任何 Apple Silicon Mac（含 ExFAT 移动盘）双击即用，文稿跟盘走、
+# 自带独立文稿库（跟 pipx 命令行版互不共享）。
 #
 # 为什么是 --onefile 而不是 --onedir（踩坑记录）：
 #   · onedir 包一旦被 cp/ditto 复制，adhoc 代码签名 + framework 结构被破坏，
@@ -13,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-DEST="/Volumes/剪辑/thatgameapple工具集/剪辑系列/purple-soul_便携版_macos"
+DEST="/Volumes/剪辑/thatgameapple工具集/剪辑系列/purple-soul_独立版_macos"
 PY=python3.11
 
 echo "→ onefile 打包"
