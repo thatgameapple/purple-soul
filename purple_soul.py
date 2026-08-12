@@ -6,12 +6,14 @@ from textual.events import Key
 from textual.containers import Horizontal, Vertical, Center
 from textual.screen import ModalScreen
 from datetime import datetime
+import math
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 
 
 def _portable_base() -> "pathlib.Path | None":
@@ -50,6 +52,39 @@ def load_pinned() -> list[str]:
 
 def save_pinned(pinned: list[str]) -> None:
     PINNED_FILE.write_text("\n".join(pinned), encoding="utf-8")
+
+
+def list_txt_files() -> list[pathlib.Path]:
+    """SAVE_DIR \u4e0b\u6240\u6709 .txt\uff0c\u6309\u4fee\u6539\u65f6\u95f4\u5012\u5e8f\uff08\u8df3\u8fc7\u9690\u85cf\u6587\u4ef6\uff09\u3002"""
+    return sorted(
+        [f for f in SAVE_DIR.rglob("*.txt") if not f.name.startswith(".")],
+        key=lambda f: f.stat().st_mtime, reverse=True
+    )
+
+
+def fit_width(text: str, width: int) -> str:
+    """\u6309\u7ec8\u7aef\u5217\u5bbd\u622a\u65ad\u5e76\u53f3\u4fa7\u8865\u9f50 \u2014\u2014 \u4e2d\u6587/\u5168\u89d2\u5b57\u7b26\u5360 2 \u5217\uff0c
+    \u76f4\u63a5\u7528 f-string \u7684 :<26 \u4f1a\u6309\u5b57\u7b26\u6570\u8865\uff0c\u4e2d\u6587\u540d\u7684\u65f6\u95f4\u6233\u5c31\u5bf9\u4e0d\u9f50\u3002"""
+    out, w = "", 0
+    for ch in text:
+        cw = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+        if w + cw > width:
+            break
+        out += ch
+        w += cw
+    return out + " " * (width - w)
+
+
+def unique_path(target: pathlib.Path) -> pathlib.Path:
+    """\u76ee\u6807\u5df2\u5b58\u5728\u5c31\u52a0\u5e8f\u53f7\uff0c\u7edd\u4e0d\u8986\u76d6\u5df2\u6709\u6587\u7a3f\u3002"""
+    if not target.exists():
+        return target
+    counter = 2
+    while True:
+        candidate = target.with_name(f"{target.stem} {counter}{target.suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
 
 
 def parse_tags(text: str) -> list[str]:
@@ -101,6 +136,7 @@ class SettingsScreen(ModalScreen):
             yield Label("  enter to confirm  esc to cancel", id="settings-hint")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()  # 别冒泡到 App 的搜索框处理器
         new_path = event.value.strip()
         if new_path:
             self.dismiss(new_path)
@@ -142,6 +178,7 @@ class RenameScreen(ModalScreen):
             yield Label("  enter to confirm  esc to cancel", id="rename-hint")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()  # 别冒泡到 App 的搜索框处理器
         new_name = event.value.strip()
         if new_name:
             self.dismiss(new_name)
@@ -195,10 +232,7 @@ class FileListScreen(ModalScreen):
 
     def __init__(self):
         super().__init__()
-        self._all_files = sorted(
-            [f for f in SAVE_DIR.rglob("*.txt") if not f.name.startswith(".")],
-            key=lambda f: f.stat().st_mtime, reverse=True
-        )
+        self._all_files = list_txt_files()
         self._tag_tree = build_tag_tree(self._all_files)
         self._pinned: list[str] = load_pinned()
         self._pending_delete: tuple[pathlib.Path, float] | None = None
@@ -239,7 +273,7 @@ class FileListScreen(ModalScreen):
         fl.clear()
         for f in files:
             mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-            fl.append(ListItem(Label(f"  {f.stem[:26]:<26}  {mtime}"), name=str(f)))
+            fl.append(ListItem(Label(f"  {fit_width(f.stem, 26)}  {mtime}"), name=str(f)))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         name = event.item.name or ""
@@ -253,19 +287,23 @@ class FileListScreen(ModalScreen):
             self.dismiss(name)
 
     def on_tag_list_view_pin_toggled(self, message: TagListView.PinToggled) -> None:
-        tl = self.query_one("#tag-list", TagListView)
-        children = list(tl.children)
+        """只有焦点在标签栏时 TagListView 才会发这条消息，
+        所以在文件栏按 p 不会误置顶左栏标签。"""
+        self._pending_delete = None
+        children = list(self.query_one("#tag-list", TagListView).children)
         idx = message.index
-        if 0 <= idx < len(children):
-            item = children[idx]
-            if item.name and item.name.startswith("tag:"):
-                tag = item.name[4:]
-                if tag in self._pinned:
-                    self._pinned.remove(tag)
-                else:
-                    self._pinned.insert(0, tag)
-                save_pinned(self._pinned)
-                self._load_tags()
+        if not (0 <= idx < len(children)):
+            return
+        item = children[idx]
+        if not (item.name and item.name.startswith("tag:")):
+            return
+        tag = item.name[4:]
+        if tag in self._pinned:
+            self._pinned.remove(tag)
+        else:
+            self._pinned.insert(0, tag)
+        save_pinned(self._pinned)
+        self._load_tags()
 
     def on_key(self, event) -> None:
         if event.key == "escape":
@@ -277,22 +315,6 @@ class FileListScreen(ModalScreen):
                 self.query_one("#file-list").focus()
             else:
                 self.query_one("#tag-list").focus()
-        elif event.key == "p":
-            self._pending_delete = None
-            tl = self.query_one("#tag-list", TagListView)
-            idx = tl.index
-            if idx is not None:
-                children = list(tl.children)
-                if 0 <= idx < len(children):
-                    item = children[idx]
-                    if item.name and item.name.startswith("tag:"):
-                        tag = item.name[4:]
-                        if tag in self._pinned:
-                            self._pinned.remove(tag)
-                        else:
-                            self._pinned.insert(0, tag)
-                        save_pinned(self._pinned)
-                        self._load_tags()
         elif event.key == "d":
             self._handle_delete_key()
         else:
@@ -322,10 +344,7 @@ class FileListScreen(ModalScreen):
                 self.notify(f"delete failed: {e}", severity="error", timeout=3)
                 return
             self.notify(f"moved to trash: {target.stem}", timeout=2)
-            self._all_files = sorted(
-                [f for f in SAVE_DIR.rglob("*.txt") if not f.name.startswith(".")],
-                key=lambda f: f.stat().st_mtime, reverse=True
-            )
+            self._all_files = list_txt_files()
             self._tag_tree = build_tag_tree(self._all_files)
             self._load_tags()
             self._load_files(self._all_files)
@@ -485,6 +504,8 @@ class WriterApp(App):
         self._search_visible = False
         self._last_keyword: str = ""
         self._last_loaded_content: str = ""
+        self._search_timer = None
+        self._last_minute: str = ""
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -503,22 +524,26 @@ class WriterApp(App):
         self._update_status()
         self.set_interval(30, self._auto_save)
         self._breath_step = 0
-        self.set_interval(0.05, self._breathe)
+        self.set_interval(0.1, self._breathe)
 
     def _breathe(self) -> None:
-        import math
         self._breath_step += 1
         # 慢呼吸：4秒一个周期
-        val = (math.sin(self._breath_step * 0.08) + 1) / 2
+        val = (math.sin(self._breath_step * 0.16) + 1) / 2
         # 在 #1a1a1a 和 #3a3a3a 之间变化
         v = int(0x1a + val * 0x20)
         color = f"#{v:02x}{v:02x}{v:02x}"
         self.query_one("#statusbar", Label).styles.color = color
+        # 状态栏的钟原本只在敲字时才刷新，坐着不动就停住了
+        now = datetime.now().strftime("%H:%M")
+        if now != self._last_minute:
+            self._update_status()
 
     def _update_status(self) -> None:
         count = len(self.query_one("#editor", TextArea).text.replace("\n", "").replace(" ", ""))
         fname = self._current_file.stem if self._current_file else "untitled"
         now = datetime.now().strftime("%H:%M")
+        self._last_minute = now
         self.query_one("#statusbar", Label).update(f"  {fname}  ·  {count} chars  ·  {now}")
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
@@ -526,31 +551,58 @@ class WriterApp(App):
         self._dirty = current != self._last_loaded_content
         self._update_status()
 
+    def _save_current(self) -> None:
+        """切走当前这篇之前先落盘 —— 自动保存是 30 秒一次，
+        中间切文件/新建会把这段时间敲的字丢掉。"""
+        if self._dirty:
+            self._do_save(silent=True)
+
+    def _open_file(self, path: pathlib.Path) -> str | None:
+        """保存当前 → 载入目标文章。返回载入的正文，失败返回 None。"""
+        self._save_current()
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception as e:
+            self.notify(f"open failed: {e}", severity="error", timeout=3)
+            return None
+        self._current_file = path
+        self.query_one("#editor", TextArea).load_text(content)
+        self._last_loaded_content = content
+        self._dirty = False
+        self._update_status()
+        return content
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.item.name and event.item.name.startswith("search:"):
             path = pathlib.Path(event.item.name.replace("search:", ""))
-            try:
-                content = path.read_text(encoding="utf-8")
-            except Exception:
+            content = self._open_file(path)
+            if content is None:
                 return
-            self._current_file = path
-            self._dirty = False
-            editor = self.query_one("#editor", TextArea)
-            editor.load_text(content)
-            self._last_loaded_content = content
             self.action_close_search()
             self._jump_to_keyword(content, self._last_keyword)
 
+    def _cancel_search_timer(self) -> None:
+        if self._search_timer is not None:
+            self._search_timer.stop()
+            self._search_timer = None
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "search-input":
+            return
         kw = event.value.strip()
         self._last_keyword = kw
-        self._do_global_search(kw)
+        self._cancel_search_timer()
+        self._do_global_search(kw, announce=True)
 
     def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "search-input":
+            return
+        self._cancel_search_timer()
         kw = event.value.strip()
         if len(kw) >= 2:
             self._last_keyword = kw
-            self._do_global_search(kw)
+            # 防抖：每敲一个字就把全库读一遍会卡，停手 0.25 秒再搜
+            self._search_timer = self.set_timer(0.25, lambda: self._do_global_search(kw))
 
     def _jump_to_keyword(self, content: str, keyword: str) -> None:
         if not keyword:
@@ -567,17 +619,14 @@ class WriterApp(App):
                 )
                 break
 
-    def _do_global_search(self, keyword: str) -> None:
+    def _do_global_search(self, keyword: str, announce: bool = False) -> None:
         if not keyword:
             return
+        self._search_timer = None
         results = self.query_one("#search-results", ListView)
         results.clear()
-        files = sorted(
-            [f for f in SAVE_DIR.rglob("*.txt") if not f.name.startswith(".")],
-            key=lambda f: f.stat().st_mtime, reverse=True
-        )
         found = 0
-        for f in files:
+        for f in list_txt_files():
             try:
                 content = f.read_text(encoding="utf-8")
             except Exception:
@@ -592,9 +641,12 @@ class WriterApp(App):
                 mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%m-%d")
                 results.append(ListItem(Label(f"  {mtime}  {preview}"), name=f"search:{f}"))
                 found += 1
-        self.notify(f"found {found} file(s)", timeout=2)
+        # 边打边搜时不弹通知，只有回车确认才报数（否则每敲一个字闪一次）
+        if announce:
+            self.notify(f"found {found} file(s)", timeout=2)
 
     def action_new_file(self) -> None:
+        self._save_current()
         self._current_file = None
         self._dirty = False
         self.query_one("#editor", TextArea).load_text("")
@@ -617,7 +669,8 @@ class WriterApp(App):
             first_line = content.strip().splitlines()[0][:30].strip()
             name = re.sub(r'[#/\\:*?"<>|]', '', first_line).strip()
             name = name if name else datetime.now().strftime("%Y%m%d_%H%M%S")
-            self._current_file = SAVE_DIR / f"{name}.txt"
+            # 首行重名时加序号，绝不覆盖已有文稿
+            self._current_file = unique_path(SAVE_DIR / f"{name}.txt")
         self._current_file.write_text(content, encoding="utf-8")
         self._last_loaded_content = content
         self._dirty = False
@@ -626,26 +679,16 @@ class WriterApp(App):
             self.notify("saved.", timeout=2)
 
     def action_export_clipboard(self) -> None:
-        import subprocess
         content = self.query_one("#editor", TextArea).text
         if content.strip():
-            subprocess.run("pbcopy", input=content.encode("utf-8"), check=True)
+            _pbcopy(content)
             self.notify("copied to clipboard.", timeout=2)
 
     def action_open_list(self) -> None:
         def handle(path: str | None):
-            if path:
-                p = pathlib.Path(path)
-                try:
-                    content = p.read_text(encoding="utf-8")
-                except Exception:
-                    return
-                self._current_file = p
-                self._dirty = False
-                self.query_one("#editor", TextArea).load_text(content)
-                self._last_loaded_content = content
+            if path and self._open_file(pathlib.Path(path)) is not None:
                 self.query_one("#editor").focus()
-                self._update_status()
+        self._save_current()
         self.push_screen(FileListScreen(), handle)
 
     def action_open_settings(self) -> None:
@@ -714,8 +757,9 @@ class WriterApp(App):
         self.exit()
 
 
-if __name__ == "__main__":
-    WriterApp().run()
-
 def main():
     WriterApp().run()
+
+
+if __name__ == "__main__":
+    main()
