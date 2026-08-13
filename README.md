@@ -172,7 +172,7 @@ open ~/.config/purple-soul/config
 ## Update · 更新
 
 ```bash
-pipx install purple-soul --force
+pipx upgrade purple-soul
 ```
 
 或指定版本：
@@ -189,5 +189,8 @@ pipx install purple-soul==0.2.0 --force
 - 跟随终端字色
 - 紫色点缀 `#7c6af7`
 - 呼吸感状态栏
-- 每 30 秒自动保存
+- 每 30 秒自动保存；切换文章 / 新建 / 退出前也会先存好当前这篇
+- 新文章标题与已有文件重名时自动加序号（「标题 2」），绝不覆盖旧文
 - 纯文本 `.txt` 存储，永不锁定你的数据
+
+> 键位速查另有一份纯文本版：仓库里的 [`快捷键.txt`](快捷键.txt)，终端里 `cat` 一下就能看。
