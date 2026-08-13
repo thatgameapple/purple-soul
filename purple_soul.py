@@ -383,15 +383,22 @@ def _pbpaste() -> str:
 class Editor(TextArea):
     """复制/剪切/粘贴接 macOS 系统剪贴板（pbcopy/pbpaste），
     绕开 Textual 默认的 OSC52 —— macOS 终端不支持，导致复制不到系统剪贴板。
-    键位沿用 TextArea 自带的 Ctrl+C / Ctrl+X / Ctrl+V；另把 Ctrl+E 改回“复制全文”
+    键位是 Ctrl+C / Ctrl+X / Ctrl+V —— 不是 ⌘C：macOS 终端把 Cmd 组合键自己截走了
+    （它复制的是终端的屏幕选区，不是 app 里的选区），压根传不到这里，
+    所以文档一律以 Ctrl 为准。TextArea 自带的 Ctrl+Z 撤销 / Ctrl+Y 重做同理可用。
+    另把 Ctrl+E 改回“复制全文”
     （TextArea 默认 Ctrl+E 是“光标移到行尾”，会盖掉 App 的复制全文，故在此覆盖）。"""
 
     BINDINGS = [Binding("ctrl+e", "copy_all", "copy all", show=False)]
 
     def action_copy(self) -> None:
-        text = self.selected_text or self.text
+        # 复制没有任何视觉反馈，不吭声的话会以为没生效（⌘C 被终端截走那件事
+        # 就是这么被误判的），所以给一句短提示，并说清复制的是选中还是全文
+        selected = self.selected_text
+        text = selected or self.text
         if text:
             _pbcopy(text)
+            self.app.notify("copied." if selected else "copied all.", timeout=1.5)
 
     def action_cut(self) -> None:
         if self.selected_text:
